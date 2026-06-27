@@ -2,7 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { ArtistInput, SignedStatus } from "@/types";
+import type { ArtistInput, MdcCategory, MdcEntry, SignedStatus } from "@/types";
+
+const MDC_CATEGORIES: MdcCategory[] = ["genre", "region", "theme", "adjective", "affiliation", "intelligence"];
+
+const CATEGORY_LABELS: Record<MdcCategory, string> = {
+  genre: "Genre", region: "Region", theme: "Theme",
+  adjective: "Adjective", affiliation: "Affiliation", intelligence: "Intelligence",
+};
 
 const EMPTY_FORM = {
   name: "",
@@ -22,13 +29,44 @@ const EMPTY_FORM = {
   track_url: "",
   epk_url: "",
   notes: "",
+  narrative: "",
 };
 
 export function ArtistForm() {
   const router = useRouter();
   const [form, setForm] = useState(EMPTY_FORM);
+  const [mdc, setMdc] = useState<MdcEntry[]>([]);
+  const [uncanonicalized, setUncanonicalized] = useState<string[]>([]);
+  const [extracting, setExtracting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  async function handleExtractMdc() {
+    if (!form.narrative.trim()) return;
+    setExtracting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/mdc/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ narrative: form.narrative }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "MDC extraction failed");
+      const existing = new Set(mdc.map((e) => `${e.category}:${e.term}`));
+      setMdc([
+        ...mdc,
+        ...(data.normalized as MdcEntry[]).filter(
+          (e: MdcEntry) => !existing.has(`${e.category}:${e.term}`)
+        ),
+      ]);
+      setUncanonicalized(data.uncanonicalized ?? []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "MDC extraction failed");
+    } finally {
+      setExtracting(false);
+    }
+  }
 
   function update<K extends keyof typeof EMPTY_FORM>(key: K, value: (typeof EMPTY_FORM)[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -59,6 +97,8 @@ export function ArtistForm() {
       track_url: form.track_url || undefined,
       epk_url: form.epk_url || undefined,
       notes: form.notes || undefined,
+      narrative: form.narrative || undefined,
+      mdc: mdc.length > 0 ? mdc : undefined,
     };
 
     try {
@@ -260,6 +300,83 @@ export function ArtistForm() {
             onChange={(e) => update("notes", e.target.value)}
           />
         </Field>
+      </section>
+
+      <section className="surface-card p-5 space-y-4">
+        <div>
+          <h2 className="section-label mb-0.5">Narrative & MDC</h2>
+          <p className="text-xs text-[var(--muted)]">
+            Free-text narrative used to extract MDC tags for matching against reference profiles.
+          </p>
+        </div>
+        <Field label="Artist narrative">
+          <textarea
+            className="input min-h-24"
+            value={form.narrative}
+            onChange={(e) => update("narrative", e.target.value)}
+            placeholder="Describe the artist's identity, sound, themes, and positioning..."
+          />
+        </Field>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            disabled={extracting || !form.narrative.trim()}
+            onClick={handleExtractMdc}
+            className="btn btn-ghost btn-sm"
+          >
+            {extracting ? "Extracting…" : "Extract & supplement MDC"}
+          </button>
+          {mdc.length > 0 && (
+            <span className="text-xs text-[var(--muted)]">{mdc.length} tags</span>
+          )}
+        </div>
+
+        {mdc.length > 0 && (
+          <div className="space-y-2">
+            {MDC_CATEGORIES.map((cat) => {
+              const entries = mdc.filter((e) => e.category === cat);
+              if (entries.length === 0) return null;
+              return (
+                <div key={cat} className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-xs text-[var(--muted)] w-20 shrink-0">
+                    {CATEGORY_LABELS[cat]}
+                  </span>
+                  {entries.map((e) => (
+                    <span
+                      key={`${e.category}:${e.term}`}
+                      className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium"
+                      style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}
+                    >
+                      {e.term.replace(/_/g, " ")}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setMdc((prev) =>
+                            prev.filter((x) => !(x.category === e.category && x.term === e.term))
+                          )
+                        }
+                        className="ml-0.5 text-[var(--muted)] hover:text-[var(--foreground)] leading-none"
+                        aria-label={`Remove ${e.term}`}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {uncanonicalized.length > 0 && (
+          <div
+            className="rounded-xl p-3 text-sm"
+            style={{ background: "color-mix(in srgb, #ff9f0a 10%, transparent)" }}
+          >
+            <p className="font-medium">Unrecognized tags:</p>
+            <p className="text-[var(--muted)] text-xs mt-0.5">{uncanonicalized.join(" · ")}</p>
+          </div>
+        )}
       </section>
 
       <button

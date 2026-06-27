@@ -1,7 +1,19 @@
 import { AXIS_LABELS, SCORE_AXES, TIER_DESCRIPTIONS } from "@/lib/config";
 import { TierBadge } from "@/components/TierBadge";
 import { DraftOutreachButton } from "@/components/DraftOutreachButton";
-import type { Evaluation } from "@/types";
+import type { Evaluation, MatchChecklistItem } from "@/types";
+
+const STATUS_ICON: Record<MatchChecklistItem["status"], string> = {
+  match: "✓",
+  partial: "~",
+  absent: "·",
+};
+
+const STATUS_COLOR: Record<MatchChecklistItem["status"], string> = {
+  match: "#30d158",
+  partial: "#ff9f0a",
+  absent: "var(--muted)",
+};
 
 export function EvaluationCard({
   evaluation,
@@ -121,6 +133,50 @@ export function EvaluationCard({
                 </li>
               ))}
             </ul>
+          </div>
+        )}
+
+        {evaluation.match_score !== null && evaluation.match_checklist?.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <h3 className="section-label">MDC match</h3>
+              <span
+                className="text-sm font-semibold px-2 py-0.5 rounded-full"
+                style={{
+                  background: "var(--surface-2)",
+                  color:
+                    (evaluation.match_score ?? 0) >= 7
+                      ? "#30d158"
+                      : (evaluation.match_score ?? 0) >= 4
+                      ? "#ff9f0a"
+                      : "#ff453a",
+                }}
+              >
+                {evaluation.match_score?.toFixed(1)} / 10
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {evaluation.match_checklist
+                .filter((item) => item.in_source_1)
+                .map((item) => (
+                  <span
+                    key={`${item.category}:${item.term}`}
+                    className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs"
+                    style={{
+                      background: "var(--surface-2)",
+                      border: "1px solid var(--border)",
+                      color: STATUS_COLOR[item.status],
+                    }}
+                    title={`${item.status}: ${item.category}`}
+                  >
+                    <span className="font-mono text-[10px]">{STATUS_ICON[item.status]}</span>
+                    {item.term.replace(/_/g, " ")}
+                  </span>
+                ))}
+            </div>
+            <p className="text-[11px] text-[var(--muted)] mt-1.5">
+              ✓ matched by artist · · not in artist profile
+            </p>
           </div>
         )}
 

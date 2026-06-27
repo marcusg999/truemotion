@@ -25,8 +25,11 @@ export function NavBar() {
             <Link href="/artists/new" className="btn btn-ghost btn-sm">
               New artist
             </Link>
+            <Link href="/config/profiles" className="btn btn-ghost btn-sm">
+              Profiles
+            </Link>
             <Link href="/config" className="btn btn-ghost btn-sm">
-              Scoring config
+              Config
             </Link>
           </nav>
           <ThemeToggle />

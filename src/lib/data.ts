@@ -1,6 +1,14 @@
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { DEFAULT_SCORING_CONFIG } from "@/lib/config";
-import type { Artist, Evaluation, MessageDraft, ScoringConfig } from "@/types";
+import type {
+  Artist,
+  Evaluation,
+  MessageDraft,
+  MdcTaxonomyTerm,
+  ReferenceProfile,
+  ReferenceProfileInput,
+  ScoringConfig,
+} from "@/types";
 
 export interface ArtistListItem {
   artist: Artist;
@@ -91,4 +99,100 @@ export async function getScoringConfig(): Promise<ScoringConfig> {
   }
 
   return data as ScoringConfig;
+}
+
+export async function listReferenceProfiles(): Promise<ReferenceProfile[]> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("reference_profiles")
+    .select("*")
+    .order("type")
+    .order("name");
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as ReferenceProfile[];
+}
+
+export async function getReferenceProfile(id: string): Promise<ReferenceProfile | null> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("reference_profiles")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (error || !data) return null;
+  return data as ReferenceProfile;
+}
+
+export async function getTrpMasterProfile(): Promise<ReferenceProfile | null> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("reference_profiles")
+    .select("*")
+    .eq("type", "master")
+    .order("created_at")
+    .limit(1)
+    .single();
+
+  if (error || !data) return null;
+  return data as ReferenceProfile;
+}
+
+export async function createReferenceProfile(
+  input: ReferenceProfileInput
+): Promise<ReferenceProfile> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("reference_profiles")
+    .insert({
+      name: input.name,
+      type: input.type,
+      narrative: input.narrative ?? null,
+      mdc: input.mdc ?? [],
+    })
+    .select()
+    .single();
+
+  if (error || !data) throw new Error(error?.message ?? "Failed to create profile");
+  return data as ReferenceProfile;
+}
+
+export async function updateReferenceProfile(
+  id: string,
+  input: Partial<ReferenceProfileInput>
+): Promise<ReferenceProfile> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("reference_profiles")
+    .update({
+      ...(input.name !== undefined && { name: input.name }),
+      ...(input.type !== undefined && { type: input.type }),
+      ...(input.narrative !== undefined && { narrative: input.narrative }),
+      ...(input.mdc !== undefined && { mdc: input.mdc }),
+    })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error || !data) throw new Error(error?.message ?? "Failed to update profile");
+  return data as ReferenceProfile;
+}
+
+export async function deleteReferenceProfile(id: string): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  const { error } = await supabase.from("reference_profiles").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+export async function getMdcTaxonomy(): Promise<MdcTaxonomyTerm[]> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("mdc_taxonomy")
+    .select("*")
+    .order("category")
+    .order("canonical_term");
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as MdcTaxonomyTerm[];
 }

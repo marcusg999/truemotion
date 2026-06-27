@@ -32,6 +32,8 @@ export interface Artist {
   track_url: string | null;
   epk_url: string | null;
   notes: string | null;
+  narrative: string | null;
+  mdc: MdcEntry[];
   created_at: string;
   updated_at: string;
 }
@@ -70,6 +72,9 @@ export interface Evaluation {
   growth_path: string[];
   weights_used: ScoringWeights;
   missing_fields: string[];
+  reference_profile_id: string | null;
+  match_score: number | null;
+  match_checklist: MatchChecklistItem[];
 }
 
 export interface MessageDraft {
@@ -102,4 +107,47 @@ export interface ScoringConfig {
   weights: ScoringWeights;
   tier_bands: TierBand[];
   updated_at: string;
+}
+
+// MDC matching
+
+export type MdcCategory = "genre" | "region" | "theme" | "adjective" | "affiliation" | "intelligence";
+
+export interface MdcEntry {
+  category: MdcCategory;
+  term: string;
+  weight: number;
+}
+
+export interface MdcTaxonomyTerm {
+  id: string;
+  category: MdcCategory;
+  canonical_term: string;
+  synonyms: string[];
+  weight: number;
+  created_at: string;
+}
+
+export type ReferenceProfileType = "master" | "archetype" | "campaign";
+
+export interface ReferenceProfile {
+  id: string;
+  name: string;
+  type: ReferenceProfileType;
+  narrative: string | null;
+  mdc: MdcEntry[];
+  created_at: string;
+  updated_at: string;
+}
+
+export type ReferenceProfileInput = Omit<ReferenceProfile, "id" | "created_at" | "updated_at">;
+
+export type MatchStatus = "match" | "partial" | "absent";
+
+export interface MatchChecklistItem {
+  category: MdcCategory;
+  term: string;
+  status: MatchStatus;
+  in_source_1: boolean;
+  in_source_2: boolean;
 }

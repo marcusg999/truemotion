@@ -69,6 +69,8 @@ export async function POST(request: NextRequest) {
     track_url: body.track_url?.trim() || null,
     epk_url: body.epk_url?.trim() || null,
     notes: body.notes?.trim() || null,
+    narrative: body.narrative?.trim() || null,
+    mdc: body.mdc ?? [],
   };
 
   const { data, error } = await supabase

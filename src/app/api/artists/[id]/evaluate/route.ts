@@ -2,14 +2,27 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { DEFAULT_SCORING_CONFIG } from "@/lib/config";
 import { runScoringPipeline } from "@/lib/pipeline/scoring";
-import type { Artist, Evaluation, ScoringConfig } from "@/types";
+import { runMdcExtraction } from "@/lib/pipeline/mdc";
+import { computeMatch } from "@/lib/pipeline/matching";
+import { getTrpMasterProfile, getReferenceProfile } from "@/lib/data";
+import type { Artist, Evaluation, MatchChecklistItem, MdcEntry, ReferenceProfile, ScoringConfig } from "@/types";
+import type { MatchContext } from "@/lib/pipeline/scoring";
 
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
   const supabase = getSupabaseServerClient();
+
+  // Parse optional reference_profile_id from request body (body is always optional)
+  let requestedProfileId: string | null = null;
+  try {
+    const body = await request.json();
+    requestedProfileId = body?.reference_profile_id ?? null;
+  } catch {
+    // no body or non-JSON body — fine, proceed with defaults
+  }
 
   const { data: artist, error: artistError } = await supabase
     .from("artists")
@@ -37,9 +50,51 @@ export async function POST(
     updated_at: new Date().toISOString(),
   };
 
+  // Resolve reference profile (requested → master fallback → null)
+  let referenceProfile: ReferenceProfile | null = null;
+  if (requestedProfileId) {
+    referenceProfile = await getReferenceProfile(requestedProfileId);
+  }
+  if (!referenceProfile) {
+    referenceProfile = await getTrpMasterProfile();
+  }
+
+  // Build match context if we have both a reference profile and artist narrative/MDC
+  let matchContext: MatchContext | undefined;
+  let artistMdc: MdcEntry[] = (artist as Artist).mdc ?? [];
+  let computedMatchScore: number | null = null;
+  let computedChecklist: MatchChecklistItem[] = [];
+
+  if (referenceProfile) {
+    // Extract artist MDC from narrative if not already stored
+    if (artistMdc.length === 0 && (artist as Artist).narrative) {
+      try {
+        const { normalized } = await runMdcExtraction((artist as Artist).narrative!);
+        artistMdc = normalized;
+      } catch {
+        // MDC extraction failed — proceed without it; don't block scoring
+      }
+    }
+
+    const referenceMdc = referenceProfile.mdc ?? [];
+
+    if (artistMdc.length > 0 && referenceMdc.length > 0) {
+      const matchResult = computeMatch(referenceMdc, artistMdc);
+      computedMatchScore = matchResult.match_score;
+      computedChecklist = matchResult.checklist;
+
+      matchContext = {
+        matchScore: matchResult.match_score,
+        checklist: matchResult.checklist,
+        profileName: referenceProfile.name,
+        profileNarrative: referenceProfile.narrative ?? "",
+      };
+    }
+  }
+
   let result;
   try {
-    result = await runScoringPipeline(artist as Artist, config);
+    result = await runScoringPipeline(artist as Artist, config, matchContext);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Scoring pipeline failed";
     return NextResponse.json({ error: message }, { status: 502 });
@@ -65,6 +120,9 @@ export async function POST(
     growth_path: result.growthPath,
     weights_used: config.weights,
     missing_fields: result.missingFields,
+    reference_profile_id: referenceProfile?.id ?? null,
+    match_score: computedMatchScore,
+    match_checklist: computedChecklist,
   };
 
   const { data: evaluation, error: insertError } = await supabase

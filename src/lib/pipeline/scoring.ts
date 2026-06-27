@@ -5,9 +5,17 @@ import type {
   Artist,
   ArchetypeBlendEntry,
   AxisResult,
+  MatchChecklistItem,
   ScoringConfig,
   Tier,
 } from "@/types";
+
+export interface MatchContext {
+  matchScore: number;
+  checklist: MatchChecklistItem[];
+  profileName: string;
+  profileNarrative: string;
+}
 
 export interface ScoringResult {
   axisResults: Record<(typeof SCORE_AXES)[number], AxisResult>;
@@ -20,24 +28,48 @@ export interface ScoringResult {
   growthPath: string[];
 }
 
-const AXIS_RUBRIC = `
+function buildAxisRubric(matchContext?: MatchContext): string {
+  const cultureFitLine = matchContext
+    ? `- Culture Fit: alignment with ${matchContext.profileName}.
+  Profile summary: ${matchContext.profileNarrative.slice(0, 300)}...
+  MDC match score: ${matchContext.matchScore}/10.
+  MDC checklist (reference terms): ${
+    matchContext.checklist
+      .filter((c) => c.in_source_1)
+      .map((c) => `${c.term} [${c.status}]`)
+      .join(", ") || "none"
+  }.
+  Use the match checklist as your primary anchor for Culture Fit. A high match score
+  means the artist's narrative aligns closely; low means misalignment. Adjust score
+  accordingly, but do not ignore evidence from the artist profile itself.`
+    : `- Culture Fit: alignment with TRP's identity and mission (TRP is an
+  infrastructure platform for the hip-hop economy — intelligent, culturally
+  grounded, forward-looking, curated; "Wired for hip-hop" tone, not gossip
+  or hype-only content).`;
+
+  const strategicFitLine = matchContext
+    ? `- Strategic Fit: does TRP specifically need/benefit from this artist right
+  now (gap-fill, roster balance, availability)? MDC match score of ${matchContext.matchScore}/10
+  is a prior — a strong match suggests strategic alignment; a weak match suggests a gap
+  that may or may not be worth bridging.`
+    : `- Strategic Fit: does TRP specifically need/benefit from this artist right
+  now (gap-fill, roster balance, availability)?`;
+
+  return `
 Score these five axes from 0-10 (one decimal place), each with a single
 sentence rationale grounded in the data provided. Be honest about thin data:
 do not invent specifics that were not given.
 
 - Craft: skill, originality, vocal/lyrical quality.
 - Traction: audience size, engagement quality, momentum.
-- Culture Fit: alignment with TRP's identity and mission (TRP is an
-  infrastructure platform for the hip-hop economy — intelligent, culturally
-  grounded, forward-looking, curated; "Wired for hip-hop" tone, not gossip
-  or hype-only content).
+${cultureFitLine}
 - Readiness: professionalism, consistency, catalog depth.
-- Strategic Fit: does TRP specifically need/benefit from this artist right
-  now (gap-fill, roster balance, availability)?
+${strategicFitLine}
 
 Do not let archetype lane (e.g. gender, region, sub-genre) structurally
 penalize Craft or Traction. Score what is actually evidenced.
 `.trim();
+}
 
 function buildArchetypeRubric(): string {
   return ARCHETYPES.map(
@@ -64,6 +96,7 @@ function buildArtistProfile(artist: Partial<Artist>, missingFields: string[]): s
   if (artist.track_url) lines.push(`Track URL: ${artist.track_url}`);
   if (artist.epk_url) lines.push(`EPK URL: ${artist.epk_url}`);
   if (artist.notes) lines.push(`Scout notes: ${artist.notes}`);
+  if (artist.narrative) lines.push(`Artist narrative: ${artist.narrative.slice(0, 600)}`);
 
   if (missingFields.length) {
     lines.push("");
@@ -133,7 +166,8 @@ const EVALUATION_TOOL = {
 
 export async function runScoringPipeline(
   artist: Partial<Artist>,
-  config: ScoringConfig
+  config: ScoringConfig,
+  matchContext?: MatchContext
 ): Promise<ScoringResult> {
   const { confidence, missingFields } = computeConfidence(artist);
 
@@ -143,7 +177,7 @@ platform and infrastructure layer for the hip-hop economy. Evaluate the
 following artist using the rubric and archetype list below, then call the
 submit_evaluation tool with your results.
 
-${AXIS_RUBRIC}
+${buildAxisRubric(matchContext)}
 
 TRP archetype reference (return a blend, never force a single bucket):
 ${buildArchetypeRubric()}
