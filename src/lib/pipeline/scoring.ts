@@ -2,6 +2,7 @@ import { getAnthropicClient, ANTHROPIC_MODEL } from "@/lib/anthropic";
 import { ARCHETYPES, AXIS_LABELS, SCORE_AXES, resolveTier } from "@/lib/config";
 import { computeConfidence } from "@/lib/pipeline/confidence";
 import type {
+  Archetype,
   Artist,
   ArchetypeBlendEntry,
   AxisResult,
@@ -71,10 +72,9 @@ penalize Craft or Traction. Score what is actually evidenced.
 `.trim();
 }
 
-function buildArchetypeRubric(): string {
-  return ARCHETYPES.map(
-    (a) => `- ${a.name} (${a.reference}): ${a.description}`
-  ).join("\n");
+function buildArchetypeRubric(archetypes: Archetype[]): string {
+  const list = archetypes.length > 0 ? archetypes : ARCHETYPES;
+  return list.map((a) => `- ${a.name} (${a.reference}): ${a.description}`).join("\n");
 }
 
 function buildArtistProfile(artist: Partial<Artist>, missingFields: string[]): string {
@@ -167,7 +167,8 @@ const EVALUATION_TOOL = {
 export async function runScoringPipeline(
   artist: Partial<Artist>,
   config: ScoringConfig,
-  matchContext?: MatchContext
+  matchContext?: MatchContext,
+  archetypes: Archetype[] = []
 ): Promise<ScoringResult> {
   const { confidence, missingFields } = computeConfidence(artist);
 
@@ -180,7 +181,7 @@ submit_evaluation tool with your results.
 ${buildAxisRubric(matchContext)}
 
 TRP archetype reference (return a blend, never force a single bucket):
-${buildArchetypeRubric()}
+${buildArchetypeRubric(archetypes)}
 
 Artist profile:
 ${buildArtistProfile(artist, missingFields)}

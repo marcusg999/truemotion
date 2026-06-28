@@ -1,6 +1,7 @@
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { DEFAULT_SCORING_CONFIG } from "@/lib/config";
 import type {
+  Archetype,
   Artist,
   ArtistEvent,
   Cta,
@@ -325,4 +326,14 @@ export async function getAnalyticsRaw(): Promise<AnalyticsRaw> {
     ctas: (ctasRes.data ?? []) as AnalyticsRaw["ctas"],
     deals: (dealsRes.data ?? []) as AnalyticsRaw["deals"],
   };
+}
+
+export async function getArchetypes(): Promise<Archetype[]> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("archetypes")
+    .select("*")
+    .order("display_order", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as Archetype[];
 }

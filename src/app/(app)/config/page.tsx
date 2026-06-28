@@ -3,13 +3,16 @@ import { getScoringConfig } from "@/lib/data";
 import { ScoringConfigForm } from "@/components/ScoringConfigForm";
 import { SetupNotice } from "@/components/SetupNotice";
 import { ChevronLeftIcon } from "@/components/icons";
+import { getSessionUser } from "@/lib/auth";
 
 export default async function ConfigPage() {
-  let config;
-  try {
-    config = await getScoringConfig();
-  } catch (err) {
-    return <SetupNotice error={err} />;
+  const [config, user] = await Promise.all([
+    getScoringConfig().catch(() => null),
+    getSessionUser(),
+  ]);
+
+  if (!config) {
+    try { await getScoringConfig(); } catch (err) { return <SetupNotice error={err} />; }
   }
 
   return (
@@ -29,7 +32,22 @@ export default async function ConfigPage() {
           and tier.
         </p>
       </div>
-      <ScoringConfigForm initial={config} />
+      <ScoringConfigForm initial={config!} />
+      {user?.role === "admin" && (
+        <div className="surface-card p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-semibold">Archetypes</h2>
+              <p className="text-sm text-[var(--muted)] mt-0.5">
+                Create, edit, and remove the artist archetypes used in evaluations.
+              </p>
+            </div>
+            <Link href="/config/archetypes" className="btn btn-secondary btn-sm">
+              Manage
+            </Link>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

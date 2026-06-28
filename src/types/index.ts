@@ -1,5 +1,17 @@
 export type SignedStatus = "independent" | "signed" | "unknown";
 
+export interface Archetype {
+  id: string;
+  name: string;
+  reference: string;
+  description: string;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ArchetypeInput = Pick<Archetype, "name" | "reference" | "description" | "display_order">;
+
 export type Tier = "SIGN" | "NURTURE" | "GUIDE" | "NOT_READY" | "PASS";
 
 export type ScoreAxis =

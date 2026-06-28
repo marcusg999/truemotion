@@ -3,8 +3,8 @@ import { DEFAULT_SCORING_CONFIG } from "@/lib/config";
 import { runScoringPipeline } from "@/lib/pipeline/scoring";
 import { runMdcExtraction } from "@/lib/pipeline/mdc";
 import { computeMatch } from "@/lib/pipeline/matching";
-import { getTrpMasterProfile, getReferenceProfile } from "@/lib/data";
-import type { Artist, MatchChecklistItem, MdcEntry, ReferenceProfile, ScoringConfig } from "@/types";
+import { getTrpMasterProfile, getReferenceProfile, getArchetypes } from "@/lib/data";
+import type { Archetype, Artist, MatchChecklistItem, MdcEntry, ReferenceProfile, ScoringConfig } from "@/types";
 import type { MatchContext } from "@/lib/pipeline/scoring";
 
 export async function runEvaluationForArtist(
@@ -32,6 +32,13 @@ export async function runEvaluationForArtist(
     ...DEFAULT_SCORING_CONFIG,
     updated_at: new Date().toISOString(),
   };
+
+  let archetypes: Archetype[] = [];
+  try {
+    archetypes = await getArchetypes();
+  } catch {
+    // fall back to hardcoded list in scoring pipeline
+  }
 
   let referenceProfile: ReferenceProfile | null = null;
   if (referenceProfileId) {
@@ -70,7 +77,7 @@ export async function runEvaluationForArtist(
     }
   }
 
-  const result = await runScoringPipeline(artist as Artist, config, matchContext);
+  const result = await runScoringPipeline(artist as Artist, config, matchContext, archetypes);
 
   const record = {
     artist_id: artistId,
