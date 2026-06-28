@@ -23,21 +23,14 @@ export async function NavBar() {
         </Link>
         <div className="flex items-center gap-2">
           <nav className="hidden sm:flex items-center gap-1 text-sm">
-            <Link href="/" className="btn btn-ghost btn-sm">
-              Pipeline
-            </Link>
-            <Link href="/artists/new" className="btn btn-ghost btn-sm">
-              New artist
-            </Link>
-            <Link href="/queue" className="btn btn-ghost btn-sm">
-              Queue
-            </Link>
-            <Link href="/config/profiles" className="btn btn-ghost btn-sm">
-              Profiles
-            </Link>
-            <Link href="/config" className="btn btn-ghost btn-sm">
-              Config
-            </Link>
+            <Link href="/" className="btn btn-ghost btn-sm">Pipeline</Link>
+            <Link href="/analytics" className="btn btn-ghost btn-sm">Analytics</Link>
+            <Link href="/queue" className="btn btn-ghost btn-sm">Queue</Link>
+            <Link href="/events" className="btn btn-ghost btn-sm">Events</Link>
+            <Link href="/commissions" className="btn btn-ghost btn-sm">Commissions</Link>
+            <Link href="/artists/new" className="btn btn-ghost btn-sm">New artist</Link>
+            <Link href="/config/profiles" className="btn btn-ghost btn-sm">Profiles</Link>
+            <Link href="/config" className="btn btn-ghost btn-sm">Config</Link>
           </nav>
           {currentUser && (
             <div className="hidden sm:flex items-center gap-2 pl-2 border-l border-[var(--border)]">

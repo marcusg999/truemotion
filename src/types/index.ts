@@ -177,3 +177,63 @@ export interface SessionUser {
   email: string;
   role: AppRole;
 }
+
+// Events
+
+export type EventType = "call" | "meeting" | "follow_up" | "showcase" | "other";
+
+export interface ArtistEvent {
+  id: string;
+  artist_id: string;
+  title: string;
+  event_type: EventType;
+  notes: string | null;
+  scheduled_at: string;
+  completed_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Deals / commissions
+
+export type DealStatus = "prospecting" | "negotiating" | "closed" | "passed";
+export type PaymentType = "advance" | "royalty" | "milestone" | "other";
+
+export interface Deal {
+  id: string;
+  artist_id: string;
+  title: string;
+  status: DealStatus;
+  deal_value: number | null;
+  commission_pct: number | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DealPayment {
+  id: string;
+  deal_id: string;
+  payment_type: PaymentType;
+  amount: number;
+  expected_date: string | null;
+  received_date: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface DealSplit {
+  id: string;
+  deal_id: string;
+  name: string;
+  user_id: string | null;
+  split_pct: number;
+  created_at: string;
+}
+
+export interface DealWithLedger extends Deal {
+  deal_payments: DealPayment[];
+  deal_splits: DealSplit[];
+}

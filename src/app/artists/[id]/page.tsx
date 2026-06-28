@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getArtistDetail } from "@/lib/data";
+import { getArtistDetail, getArtistEvents, getArtistDeals } from "@/lib/data";
 import { getSessionUser } from "@/lib/auth";
 import { EvaluateButton } from "@/components/EvaluateButton";
 import { EvaluationCard } from "@/components/EvaluationCard";
+import { EventsSection } from "@/components/EventsSection";
+import { DealsSection } from "@/components/DealsSection";
 import { SetupNotice } from "@/components/SetupNotice";
 import { ChevronLeftIcon, MessageIcon } from "@/components/icons";
 
@@ -24,7 +26,11 @@ export default async function ArtistDetailPage({
   if (!detail) notFound();
 
   const { artist, evaluations, messageDrafts, ctas } = detail;
-  const currentUser = await getSessionUser();
+  const [currentUser, events, deals] = await Promise.all([
+    getSessionUser(),
+    getArtistEvents(id),
+    getArtistDeals(id),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -132,6 +138,10 @@ export default async function ArtistDetailPage({
           </div>
         )}
       </section>
+
+      <EventsSection artistId={artist.id} initialEvents={events} />
+
+      <DealsSection artistId={artist.id} initialDeals={deals} />
 
       <section>
         <h2 className="section-label mb-3">Evaluation history</h2>

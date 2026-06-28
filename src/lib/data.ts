@@ -2,7 +2,12 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { DEFAULT_SCORING_CONFIG } from "@/lib/config";
 import type {
   Artist,
+  ArtistEvent,
   Cta,
+  Deal,
+  DealPayment,
+  DealSplit,
+  DealWithLedger,
   Evaluation,
   MessageDraft,
   MdcTaxonomyTerm,
@@ -225,4 +230,99 @@ export async function listCtasWithContext(): Promise<CtaWithContext[]> {
 
   if (error) throw new Error(error.message);
   return (data ?? []) as CtaWithContext[];
+}
+
+// Events
+
+export async function getArtistEvents(artistId: string): Promise<ArtistEvent[]> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("events")
+    .select("*")
+    .eq("artist_id", artistId)
+    .order("scheduled_at", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as ArtistEvent[];
+}
+
+export interface EventWithArtist extends ArtistEvent {
+  artists: { id: string; name: string } | null;
+}
+
+export async function listEventsWithArtist(): Promise<EventWithArtist[]> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("events")
+    .select("*, artists ( id, name )")
+    .order("scheduled_at", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as EventWithArtist[];
+}
+
+// Deals
+
+export async function getArtistDeals(artistId: string): Promise<DealWithLedger[]> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("deals")
+    .select("*, deal_payments (*), deal_splits (*)")
+    .eq("artist_id", artistId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as DealWithLedger[];
+}
+
+export interface DealWithArtist extends Deal {
+  deal_payments: DealPayment[];
+  deal_splits: DealSplit[];
+  artists: { id: string; name: string } | null;
+}
+
+export async function listDealsWithArtist(): Promise<DealWithArtist[]> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("deals")
+    .select("*, deal_payments (*), deal_splits (*), artists ( id, name )")
+    .order("updated_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as DealWithArtist[];
+}
+
+// Analytics raw data
+
+export interface AnalyticsRaw {
+  artists: Pick<Artist, "id" | "created_at">[];
+  evaluations: Pick<
+    Evaluation,
+    "id" | "tier" | "composite_score" | "confidence_score" | "archetype_blend" | "created_at"
+  >[];
+  ctas: Pick<Cta, "id" | "status">[];
+  deals: (Pick<Deal, "id" | "status" | "deal_value" | "commission_pct"> & {
+    deal_payments: Pick<DealPayment, "amount" | "received_date">[];
+  })[];
+}
+
+export async function getAnalyticsRaw(): Promise<AnalyticsRaw> {
+  const supabase = getSupabaseServerClient();
+
+  const [artistsRes, evaluationsRes, ctasRes, dealsRes] = await Promise.all([
+    supabase.from("artists").select("id, created_at"),
+    supabase
+      .from("evaluations")
+      .select("id, tier, composite_score, confidence_score, archetype_blend, created_at"),
+    supabase.from("ctas").select("id, status"),
+    supabase.from("deals").select("id, status, deal_value, commission_pct, deal_payments ( amount, received_date )"),
+  ]);
+
+  if (artistsRes.error) throw new Error(artistsRes.error.message);
+  if (evaluationsRes.error) throw new Error(evaluationsRes.error.message);
+  if (ctasRes.error) throw new Error(ctasRes.error.message);
+  if (dealsRes.error) throw new Error(dealsRes.error.message);
+
+  return {
+    artists: (artistsRes.data ?? []) as AnalyticsRaw["artists"],
+    evaluations: (evaluationsRes.data ?? []) as AnalyticsRaw["evaluations"],
+    ctas: (ctasRes.data ?? []) as AnalyticsRaw["ctas"],
+    deals: (dealsRes.data ?? []) as AnalyticsRaw["deals"],
+  };
 }
