@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/auth";
 import type { Artist, ArtistInput, Evaluation } from "@/types";
 
 export interface ArtistListItem {
@@ -44,6 +45,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const supabase = getSupabaseServerClient();
   const body = (await request.json()) as Partial<ArtistInput>;
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listReferenceProfiles, createReferenceProfile } from "@/lib/data";
+import { getSessionUser } from "@/lib/auth";
 import type { ReferenceProfileInput } from "@/types";
 
 export async function GET() {
@@ -13,6 +14,11 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const user = await getSessionUser();
+  if (!user || user.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   let body: Partial<ReferenceProfileInput>;
   try {
     body = await request.json();

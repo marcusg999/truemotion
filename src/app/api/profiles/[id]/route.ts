@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getReferenceProfile, updateReferenceProfile, deleteReferenceProfile } from "@/lib/data";
+import { getSessionUser } from "@/lib/auth";
 import type { ReferenceProfileInput } from "@/types";
 
 export async function GET(
@@ -18,6 +19,11 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const user = await getSessionUser();
+  if (!user || user.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const { id } = await params;
 
   let body: Partial<ReferenceProfileInput>;
@@ -40,6 +46,11 @@ export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const user = await getSessionUser();
+  if (!user || user.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const { id } = await params;
 
   try {

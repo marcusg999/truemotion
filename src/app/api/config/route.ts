@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/auth";
 import { DEFAULT_SCORING_CONFIG, SCORE_AXES } from "@/lib/config";
 import type { ScoringConfig, ScoringWeights, TierBand } from "@/types";
 
@@ -22,6 +23,11 @@ export async function GET() {
 }
 
 export async function PUT(request: NextRequest) {
+  const user = await getSessionUser();
+  if (!user || user.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const supabase = getSupabaseServerClient();
   const body = (await request.json()) as {
     weights?: ScoringWeights;

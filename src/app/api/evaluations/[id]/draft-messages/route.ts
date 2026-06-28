@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/auth";
 import { runOutreachPipeline } from "@/lib/pipeline/outreach";
 import type { Artist, Evaluation, MessageDraft } from "@/types";
 
@@ -7,6 +8,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const { id } = await params;
   const supabase = getSupabaseServerClient();
 

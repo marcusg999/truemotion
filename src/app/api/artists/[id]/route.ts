@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/auth";
 import type { Artist, ArtistInput, Evaluation, MessageDraft } from "@/types";
 
 export interface ArtistDetailResponse {
@@ -58,6 +59,9 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const { id } = await params;
   const supabase = getSupabaseServerClient();
   const body = (await request.json()) as Partial<ArtistInput>;

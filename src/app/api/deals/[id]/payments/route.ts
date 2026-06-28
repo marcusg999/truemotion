@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/auth";
 import type { PaymentType } from "@/types";
 
 const VALID_TYPES: PaymentType[] = ["advance", "royalty", "milestone", "other"];
@@ -8,6 +9,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const { id } = await params;
   let payment_type: PaymentType, amount: number, expected_date: string | null, received_date: string | null, notes: string | undefined;
 
