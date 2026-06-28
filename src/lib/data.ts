@@ -2,6 +2,7 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { DEFAULT_SCORING_CONFIG } from "@/lib/config";
 import type {
   Artist,
+  Cta,
   Evaluation,
   MessageDraft,
   MdcTaxonomyTerm,
@@ -49,6 +50,7 @@ export interface ArtistDetail {
   artist: Artist;
   evaluations: Evaluation[];
   messageDrafts: MessageDraft[];
+  ctas: Cta[];
 }
 
 export async function getArtistDetail(id: string): Promise<ArtistDetail | null> {
@@ -78,10 +80,18 @@ export async function getArtistDetail(id: string): Promise<ArtistDetail | null> 
 
   if (messagesError) throw new Error(messagesError.message);
 
+  const { data: ctas, error: ctasError } = await supabase
+    .from("ctas")
+    .select("*")
+    .eq("artist_id", id);
+
+  if (ctasError) throw new Error(ctasError.message);
+
   return {
     artist: artist as Artist,
     evaluations: (evaluations ?? []) as Evaluation[],
     messageDrafts: (messageDrafts ?? []) as MessageDraft[],
+    ctas: (ctas ?? []) as Cta[],
   };
 }
 
@@ -195,4 +205,24 @@ export async function getMdcTaxonomy(): Promise<MdcTaxonomyTerm[]> {
 
   if (error) throw new Error(error.message);
   return (data ?? []) as MdcTaxonomyTerm[];
+}
+
+export interface CtaWithContext extends Cta {
+  artists: { id: string; name: string; region: string | null; instagram_handle: string | null } | null;
+  evaluations: { id: string; tier: string; composite_score: number; created_at: string } | null;
+}
+
+export async function listCtasWithContext(): Promise<CtaWithContext[]> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("ctas")
+    .select(`
+      *,
+      artists ( id, name, region, instagram_handle ),
+      evaluations ( id, tier, composite_score, created_at )
+    `)
+    .order("updated_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as CtaWithContext[];
 }

@@ -1,7 +1,8 @@
 import { AXIS_LABELS, SCORE_AXES, TIER_DESCRIPTIONS } from "@/lib/config";
 import { TierBadge } from "@/components/TierBadge";
 import { DraftOutreachButton } from "@/components/DraftOutreachButton";
-import type { Evaluation, MatchChecklistItem } from "@/types";
+import { CtaPanel } from "@/components/CtaPanel";
+import type { Cta, Evaluation, MatchChecklistItem, SessionUser } from "@/types";
 
 const STATUS_ICON: Record<MatchChecklistItem["status"], string> = {
   match: "✓",
@@ -18,10 +19,14 @@ const STATUS_COLOR: Record<MatchChecklistItem["status"], string> = {
 export function EvaluationCard({
   evaluation,
   artistId,
+  cta,
+  currentUser,
   defaultOpen,
 }: {
   evaluation: Evaluation;
   artistId: string;
+  cta: Cta | null;
+  currentUser: SessionUser | null;
   defaultOpen?: boolean;
 }) {
   const sortedArchetypes = [...(evaluation.archetype_blend ?? [])].sort(
@@ -179,6 +184,17 @@ export function EvaluationCard({
             </p>
           </div>
         )}
+
+        <div className="pt-2 border-t border-[var(--border)]">
+          <h3 className="section-label mb-2">CTA</h3>
+          <CtaPanel
+            evaluationId={evaluation.id}
+            artistId={artistId}
+            tier={evaluation.tier}
+            cta={cta}
+            currentUser={currentUser}
+          />
+        </div>
 
         <div className="pt-2 border-t border-[var(--border)]">
           <h3 className="section-label mb-2">Outreach</h3>

@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { HomeIcon, PlusCircleIcon, SlidersIcon } from "@/components/icons";
+import { HomeIcon, PlusCircleIcon, QueueIcon, SlidersIcon } from "@/components/icons";
 
 const TABS = [
   { href: "/", label: "Pipeline", icon: HomeIcon },
   { href: "/artists/new", label: "New", icon: PlusCircleIcon },
+  { href: "/queue", label: "Queue", icon: QueueIcon },
   { href: "/config", label: "Config", icon: SlidersIcon },
 ];
 
@@ -15,7 +16,7 @@ export function BottomNav() {
 
   return (
     <nav className="sm:hidden fixed bottom-0 inset-x-0 z-40 border-t border-[var(--border)] bg-[var(--background)]/85 backdrop-blur-xl pb-safe">
-      <div className="grid grid-cols-3">
+      <div className="grid grid-cols-4">
         {TABS.map(({ href, label, icon: Icon }) => {
           const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
           return (

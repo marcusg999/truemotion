@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getArtistDetail } from "@/lib/data";
+import { getSessionUser } from "@/lib/auth";
 import { EvaluateButton } from "@/components/EvaluateButton";
 import { EvaluationCard } from "@/components/EvaluationCard";
 import { SetupNotice } from "@/components/SetupNotice";
@@ -22,7 +23,8 @@ export default async function ArtistDetailPage({
 
   if (!detail) notFound();
 
-  const { artist, evaluations, messageDrafts } = detail;
+  const { artist, evaluations, messageDrafts, ctas } = detail;
+  const currentUser = await getSessionUser();
 
   return (
     <div className="space-y-6">
@@ -144,6 +146,8 @@ export default async function ArtistDetailPage({
                 key={evaluation.id}
                 evaluation={evaluation}
                 artistId={artist.id}
+                cta={ctas.find((c) => c.evaluation_id === evaluation.id) ?? null}
+                currentUser={currentUser}
                 defaultOpen={i === 0}
               />
             ))}

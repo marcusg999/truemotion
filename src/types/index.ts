@@ -151,3 +151,29 @@ export interface MatchChecklistItem {
   in_source_1: boolean;
   in_source_2: boolean;
 }
+
+// CTA workflow
+
+export type CtaAction = "reach_out" | "nurture" | "watchlist" | "pass";
+export type CtaStatus = "pending" | "agreed" | "actioned";
+export type AppRole = "kol" | "team" | "admin";
+
+export interface Cta {
+  id: string;
+  evaluation_id: string;
+  artist_id: string;
+  action: CtaAction;
+  status: CtaStatus;
+  note: string | null;
+  created_by: string | null;
+  agreed_by: string | null;
+  actioned_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SessionUser {
+  id: string;
+  email: string;
+  role: AppRole;
+}
