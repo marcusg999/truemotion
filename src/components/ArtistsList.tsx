@@ -205,7 +205,17 @@ export function ArtistsList({ items }: { items: ArtistListItem[] }) {
               />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="font-semibold truncate">{artist.name}</p>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <p className="font-semibold truncate">{artist.name}</p>
+                    {artist.source === "submission" && (
+                      <span
+                        className="shrink-0 text-[10px] font-bold uppercase tracking-wider rounded px-1.5 py-0.5"
+                        style={{ background: "var(--surface-2)", color: "var(--muted)", border: "1px solid var(--border)" }}
+                      >
+                        Submission
+                      </span>
+                    )}
+                  </div>
                   {latestEvaluation && <TierBadge tier={latestEvaluation.tier} size="sm" />}
                 </div>
                 <p className="text-xs text-[var(--muted)] truncate mt-0.5">

@@ -16,6 +16,8 @@ export type MessageStatus = "draft" | "approved" | "edited" | "archived";
 export interface Artist {
   id: string;
   name: string;
+  email: string | null;
+  source: "manual" | "submission";
   alias: string | null;
   instagram_handle: string | null;
   region: string | null;
