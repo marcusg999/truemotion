@@ -13,6 +13,7 @@ True Motion is the A&R evaluation and outreach pipeline for TRP.L (The Rap Proje
    - [Signing in](#signing-in)
    - [Pipeline — the home view](#pipeline--the-home-view)
    - [Adding an artist](#adding-an-artist)
+   - [Artist submission portal](#artist-submission-portal)
    - [Running an evaluation](#running-an-evaluation)
    - [Reading an evaluation card](#reading-an-evaluation-card)
    - [CTA workflow](#cta-workflow)
@@ -23,6 +24,7 @@ True Motion is the A&R evaluation and outreach pipeline for TRP.L (The Rap Proje
    - [Drafting outreach messages](#drafting-outreach-messages)
    - [Reference profiles](#reference-profiles)
    - [Scoring config](#scoring-config)
+   - [User management](#user-management)
 5. [Navigation reference](#navigation-reference)
 6. [Roles](#roles)
 7. [Data model](#data-model)
@@ -47,8 +49,9 @@ Each artist is stored permanently. Every evaluation is a snapshot in time — yo
 |---|---|
 | Frontend / Backend | Next.js 16 (App Router) + TypeScript |
 | Database | Supabase (Postgres) |
-| LLM | Anthropic API (Claude) |
+| LLM | Anthropic API (Claude Haiku for extraction, Claude Sonnet for scoring) |
 | Auth | Supabase Auth (email + password) |
+| Hosting | Netlify (background functions for long-running evaluation) |
 
 ---
 
@@ -59,6 +62,7 @@ Each artist is stored permanently. Every evaluation is a snapshot in time — yo
 - Node.js 20+
 - A Supabase project
 - An Anthropic API key
+- A Netlify account (for production deployment)
 
 ### Steps
 
@@ -71,9 +75,21 @@ Each artist is stored permanently. Every evaluation is a snapshot in time — yo
 2. Copy `.env.example` to `.env.local` and fill in:
 
    ```
+   # Required
    SUPABASE_URL=https://<your-project>.supabase.co
    SUPABASE_SERVICE_ROLE_KEY=<service role key from Project Settings → API>
    ANTHROPIC_API_KEY=<your Anthropic key>
+
+   # Optional — override default models
+   MODEL_EXTRACTION=claude-haiku-4-5-20251001
+   MODEL_SCORING=claude-sonnet-4-6
+
+   # Optional — bot protection on the public submit form
+   TURNSTILE_SECRET_KEY=<Cloudflare Turnstile secret>
+
+   # Optional — HighLevel CRM integration
+   NEXT_PUBLIC_CRM_WIDGET_ID=<public widget/location id>
+   HL_WEBHOOK_URL=<inbound webhook URL — server only, never NEXT_PUBLIC>
    ```
 
 3. Apply all migrations in order via the Supabase SQL editor:
@@ -83,9 +99,12 @@ Each artist is stored permanently. Every evaluation is a snapshot in time — yo
    supabase/migrations/0002_mdc_matching.sql
    supabase/migrations/0003_cta_workflow.sql
    supabase/migrations/0004_phase3.sql
+   supabase/migrations/0005_submission_portal.sql
+   supabase/migrations/0006_archetypes.sql
+   supabase/migrations/0007_jobs_and_usage.sql
    ```
 
-4. Create at least one user in **Supabase dashboard → Authentication → Users**, then assign them a role via the SQL editor:
+4. Create the first admin user in **Supabase dashboard → Authentication → Users**, then assign the admin role via the SQL editor (one-time bootstrap only):
 
    ```sql
    INSERT INTO user_roles (user_id, role)
@@ -93,6 +112,8 @@ Each artist is stored permanently. Every evaluation is a snapshot in time — yo
    FROM auth.users
    WHERE email = 'you@example.com';
    ```
+
+   After that, all further user invitations and role changes are done through the app at `/config/users`.
 
 5. Start the dev server:
 
@@ -108,7 +129,7 @@ Each artist is stored permanently. Every evaluation is a snapshot in time — yo
 
 ### Signing in
 
-Go to `/login`. Enter your email and password. Accounts are created by an admin in the Supabase dashboard; there is no self-signup. After signing in you are redirected to the Pipeline.
+Go to `/login`. Enter your email and password. Accounts are created by an admin via the app (see [User management](#user-management)); there is no self-signup. After signing in you are redirected to the Pipeline.
 
 To sign out, click your username in the top-right corner of the nav bar and select **Sign out**.
 
@@ -158,23 +179,31 @@ Click **Add artist** to save.
 
 ---
 
+### Artist submission portal
+
+The public submission form lives at `/submit` and requires no login. Artists can submit their name, email, Instagram handle, region, style tags, track link, and a personal narrative.
+
+On submission:
+- The artist record is created immediately.
+- A background job runs Claude Haiku to extract MDC tags from their narrative. No scoring is performed on public submissions — a KOL must trigger a full evaluation manually from the artist's detail page.
+- Submissions are rate-limited to 3 per IP per hour.
+
+---
+
 ### Running an evaluation
 
 From any artist's detail page, click **Run evaluation**. The pipeline:
 
-1. Computes a **confidence score** based on how many profile fields are filled in.
-2. Runs **MDC extraction** on the artist's narrative (if they have one and no MDC tags yet).
-3. Computes a **match score** against the TRP master reference profile (or a specific profile you select).
-4. Sends everything to Claude, which scores the artist on five axes and returns an archetype blend, growth path, and justification.
-5. Stores the result and refreshes the page.
+1. Queues a background job and returns immediately.
+2. The button shows **Evaluating…** while the job runs.
+3. In the background, Claude Haiku extracts MDC tags (if none exist), then Claude Sonnet scores the artist on five axes and returns an archetype blend, growth path, and justification.
+4. When the job completes, the page refreshes automatically with the new evaluation.
 
-Evaluation takes 5–15 seconds depending on profile richness.
-
-You can re-evaluate an artist at any time. Each run creates a new evaluation record — prior runs are preserved in the **Evaluation history** section.
+Evaluation typically takes 15–60 seconds. If it fails, the error is shown on the button. You can re-run at any time — each run creates a new evaluation record; prior runs are preserved in the **Evaluation history** section.
 
 **Selecting a reference profile:**
 
-By default, evaluations are matched against the TRP master profile. To use a different profile (e.g. a campaign-specific or archetype-specific one), click the dropdown on the Evaluate button and select a profile before running.
+By default, evaluations are matched against the TRP master reference profile. To use a different profile (e.g. a campaign-specific or archetype-specific one), click the dropdown on the Evaluate button and select a profile before running.
 
 ---
 
@@ -195,7 +224,7 @@ Each evaluation is shown as a collapsible card. Click anywhere on the summary ba
 | Tier description | Plain-English meaning of the tier |
 | Missing fields | Which profile fields were absent at evaluation time |
 | Axis scores | Score (0–10) + one-line rationale for each of the five axes, with a mini progress bar and the weight used |
-| Archetype blend | Percentage breakdown across TRP's 13 archetypes with horizontal bars, plus Claude's justification |
+| Archetype blend | Percentage breakdown across TRP's archetypes with horizontal bars, plus Claude's justification |
 | Growth path | 2–4 concrete next steps (shown only for GUIDE and NURTURE tiers) |
 | MDC match | Match score badge + chips for each reference term (✓ = artist matches it, · = not in artist profile). Only shown when a match was computed. |
 | CTA | Call-to-action buttons (see below) |
@@ -375,6 +404,28 @@ The tag set on a reference profile defines what terms are used to score artists.
 
 ---
 
+### User management
+
+`/config/users` (admin only) lets you invite new team members and KOLs without touching the database.
+
+#### Inviting a user
+
+1. Go to **Config → Users → Manage**.
+2. Enter the person's email address and select their role (`admin`, `team`, or `kol`).
+3. Click **Invite**. Supabase sends them a magic-link email to set their password.
+
+#### Changing a role
+
+Use the role dropdown next to any user in the table. The change takes effect immediately on their next request.
+
+#### Removing a user
+
+Click **Remove** next to any user. This deletes their auth account and role. It cannot be undone.
+
+> The first admin account must still be created manually via the Supabase dashboard (one-time bootstrap). All subsequent users are managed through the app.
+
+---
+
 ## Navigation reference
 
 ### Desktop nav bar (top)
@@ -388,7 +439,7 @@ The tag set on a reference profile defines what terms are used to score artists.
 | Commissions | `/commissions` | Full deal ledger |
 | New artist | `/artists/new` | Add a new artist |
 | Profiles | `/config/profiles` | Reference profile CRUD |
-| Config | `/config` | Scoring weights and tier bands |
+| Config | `/config` | Scoring weights, tier bands, archetypes, users |
 
 ### Mobile bottom nav
 
@@ -415,28 +466,10 @@ The tag set on a reference profile defines what terms are used to score artists.
 | Role | Permissions |
 |---|---|
 | `kol` | View everything, add artists, run evaluations, create CTAs |
-| `team` | All KOL permissions + agree on CTAs |
-| `admin` | All team permissions + mark CTAs as actioned, full config access |
+| `team` | All KOL permissions + agree on CTAs, manage deals and payments |
+| `admin` | All team permissions + mark CTAs as actioned, full config access, invite and manage users |
 
-Roles are assigned by an admin in the Supabase SQL editor:
-
-```sql
--- Assign a role
-INSERT INTO user_roles (user_id, role)
-SELECT id, 'team'   -- or 'kol' or 'admin'
-FROM auth.users
-WHERE email = 'teammate@example.com';
-
--- Update an existing role
-UPDATE user_roles
-SET role = 'admin'
-WHERE user_id = (SELECT id FROM auth.users WHERE email = 'you@example.com');
-
--- View all roles
-SELECT u.email, r.role
-FROM auth.users u
-JOIN user_roles r ON r.user_id = u.id;
-```
+Roles are managed through the app at **Config → Users** (admin only). The initial admin must be bootstrapped once via SQL — see [Setup](#setup).
 
 ---
 
@@ -446,11 +479,15 @@ JOIN user_roles r ON r.user_id = u.id;
 |---|---|
 | `artists` | Artist profiles with identity, stats, narrative, and MDC tags |
 | `evaluations` | Scored evaluation snapshots (one per run) |
+| `evaluation_jobs` | Background job queue for the evaluation pipeline |
+| `usage_log` | Per-LLM-call token usage and estimated cost |
 | `message_drafts` | Claude-drafted outreach messages per evaluation |
-| `scoring_config` | Axis weights and tier-band thresholds (single row) |
+| `scoring_config` | Axis weights, tier-band thresholds, and daily eval quota (single row) |
 | `mdc_taxonomy` | Canonical MDC terms with categories, synonyms, and weights |
 | `reference_profiles` | MDC profiles for matching (master / archetype / campaign) |
+| `archetypes` | Artist archetypes used in evaluations (manageable in-app) |
 | `user_roles` | Maps Supabase Auth users to app roles |
+| `user_invites` | Log of invited users (email, role, invited_by) |
 | `ctas` | One active CTA per evaluation (reach_out / nurture / watchlist / pass) |
 | `cta_audit_log` | History of every CTA status change with actor |
 | `events` | Scheduled calls, meetings, and follow-ups per artist |
@@ -474,7 +511,7 @@ JOIN user_roles r ON r.user_id = u.id;
 
 ## Archetypes
 
-TRP uses 13 archetypes to classify an artist's style. Every evaluation returns a percentage blend across all 13 — artists are rarely a single archetype.
+TRP uses archetypes to classify an artist's style. Every evaluation returns a percentage blend — artists are rarely a single archetype. The default set is listed below; admins can create, edit, and reorder archetypes at **Config → Archetypes**.
 
 | Archetype | Reference | Description |
 |---|---|---|
