@@ -1,4 +1,4 @@
-import { getAnthropicClient, ANTHROPIC_MODEL } from "@/lib/anthropic";
+import { getAnthropicClient, MODEL_SCORING } from "@/lib/anthropic";
 import { ARCHETYPES, AXIS_LABELS, SCORE_AXES, resolveTier } from "@/lib/config";
 import { computeConfidence } from "@/lib/pipeline/confidence";
 import type {
@@ -18,6 +18,13 @@ export interface MatchContext {
   profileNarrative: string;
 }
 
+export interface ScoringUsage {
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+}
+
 export interface ScoringResult {
   axisResults: Record<(typeof SCORE_AXES)[number], AxisResult>;
   compositeScore: number;
@@ -27,6 +34,7 @@ export interface ScoringResult {
   archetypeBlend: ArchetypeBlendEntry[];
   archetypeJustification: string;
   growthPath: string[];
+  usage: ScoringUsage;
 }
 
 function buildAxisRubric(matchContext?: MatchContext): string {
@@ -172,19 +180,23 @@ export async function runScoringPipeline(
 ): Promise<ScoringResult> {
   const { confidence, missingFields } = computeConfidence(artist);
 
-  const prompt = `
-You are an A&R evaluator for TRP.L (The Rap Project Label), a technology
+  const axisRubric = buildAxisRubric(matchContext);
+  const archetypeRubric = buildArchetypeRubric(archetypes);
+  const artistProfile = buildArtistProfile(artist, missingFields);
+
+  const staticPrefix = `You are an A&R evaluator for TRP.L (The Rap Project Label), a technology
 platform and infrastructure layer for the hip-hop economy. Evaluate the
 following artist using the rubric and archetype list below, then call the
 submit_evaluation tool with your results.
 
-${buildAxisRubric(matchContext)}
+${axisRubric}
 
 TRP archetype reference (return a blend, never force a single bucket):
-${buildArchetypeRubric(archetypes)}
+${archetypeRubric}`;
 
+  const dynamicContent = `
 Artist profile:
-${buildArtistProfile(artist, missingFields)}
+${artistProfile}
 
 Confidence in this profile (based on field completeness): ${confidence}%.
 If confidence is low, keep scores conservative and say so in rationales
@@ -192,29 +204,43 @@ where relevant.
 
 For growth_path: only populate it with meaningful, concrete steps if the
 artist looks like a GUIDE or NURTURE candidate (roughly composite 4.5-8.4).
-For very high (SIGN) or very low (PASS) profiles, return an empty array.
-`.trim();
+For very high (SIGN) or very low (PASS) profiles, return an empty array.`.trim();
 
   const anthropic = getAnthropicClient();
-  const response = await anthropic.messages.create({
-    model: ANTHROPIC_MODEL,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const response = await (anthropic.messages.create as (p: any) => Promise<any>)({
+    model: MODEL_SCORING,
     max_tokens: 2048,
-    tools: [EVALUATION_TOOL],
+    tools: [{ ...EVALUATION_TOOL, cache_control: { type: "ephemeral" } }],
     tool_choice: { type: "tool", name: "submit_evaluation" },
-    messages: [{ role: "user", content: prompt }],
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: staticPrefix, cache_control: { type: "ephemeral" } },
+          { type: "text", text: `\n\n${dynamicContent}` },
+        ],
+      },
+    ],
   });
 
-  const toolUse = response.content.find((block) => block.type === "tool_use");
+  const toolUse = (response.content as { type: string }[]).find(
+    (block) => block.type === "tool_use"
+  );
   if (!toolUse || toolUse.type !== "tool_use") {
     throw new Error("Model did not return a submit_evaluation tool call");
   }
 
-  const input = toolUse.input as {
-    axis_scores: Record<string, { score: number; rationale: string }>;
-    archetype_blend: ArchetypeBlendEntry[];
-    archetype_justification: string;
-    growth_path: string[];
+  const typedToolUse = toolUse as {
+    type: "tool_use";
+    input: {
+      axis_scores: Record<string, { score: number; rationale: string }>;
+      archetype_blend: ArchetypeBlendEntry[];
+      archetype_justification: string;
+      growth_path: string[];
+    };
   };
+  const input = typedToolUse.input;
 
   const axisResults = {} as Record<(typeof SCORE_AXES)[number], AxisResult>;
   for (const axis of SCORE_AXES) {
@@ -231,6 +257,13 @@ For very high (SIGN) or very low (PASS) profiles, return an empty array.
   const compositeScore = computeComposite(axisResults, config.weights);
   const tier = resolveTier(compositeScore, config.tier_bands) as Tier;
 
+  const u = response.usage as {
+    input_tokens: number;
+    output_tokens: number;
+    cache_read_input_tokens?: number;
+    cache_creation_input_tokens?: number;
+  };
+
   return {
     axisResults,
     compositeScore,
@@ -240,6 +273,12 @@ For very high (SIGN) or very low (PASS) profiles, return an empty array.
     archetypeBlend: input.archetype_blend ?? [],
     archetypeJustification: input.archetype_justification ?? "",
     growthPath: input.growth_path ?? [],
+    usage: {
+      input_tokens: u.input_tokens,
+      output_tokens: u.output_tokens,
+      cache_read_tokens: u.cache_read_input_tokens ?? 0,
+      cache_write_tokens: u.cache_creation_input_tokens ?? 0,
+    },
   };
 }
 

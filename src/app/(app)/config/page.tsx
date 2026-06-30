@@ -34,19 +34,34 @@ export default async function ConfigPage() {
       </div>
       <ScoringConfigForm initial={config!} />
       {user?.role === "admin" && (
-        <div className="surface-card p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="font-semibold">Archetypes</h2>
-              <p className="text-sm text-[var(--muted)] mt-0.5">
-                Create, edit, and remove the artist archetypes used in evaluations.
-              </p>
+        <>
+          <div className="surface-card p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="font-semibold">Archetypes</h2>
+                <p className="text-sm text-[var(--muted)] mt-0.5">
+                  Create, edit, and remove the artist archetypes used in evaluations.
+                </p>
+              </div>
+              <Link href="/config/archetypes" className="btn btn-secondary btn-sm">
+                Manage
+              </Link>
             </div>
-            <Link href="/config/archetypes" className="btn btn-secondary btn-sm">
-              Manage
-            </Link>
           </div>
-        </div>
+          <div className="surface-card p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="font-semibold">Users</h2>
+                <p className="text-sm text-[var(--muted)] mt-0.5">
+                  Invite team members and KOLs, or change their role.
+                </p>
+              </div>
+              <Link href="/config/users" className="btn btn-secondary btn-sm">
+                Manage
+              </Link>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

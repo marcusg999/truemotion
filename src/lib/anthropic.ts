@@ -14,5 +14,11 @@ export function getAnthropicClient(): Anthropic {
   return client;
 }
 
+export const MODEL_EXTRACTION =
+  process.env.MODEL_EXTRACTION || "claude-haiku-4-5-20251001";
+
+export const MODEL_SCORING =
+  process.env.MODEL_SCORING || "claude-sonnet-4-6";
+
 export const ANTHROPIC_MODEL =
-  process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5-20250929";
+  process.env.ANTHROPIC_MODEL || MODEL_SCORING;

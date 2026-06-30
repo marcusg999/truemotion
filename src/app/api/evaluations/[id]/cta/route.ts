@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { verifyToken, AUTH_COOKIE } from "@/lib/auth";
+import { getSessionUser } from "@/lib/auth";
 import type { CtaAction, CtaStatus } from "@/types";
 
 const VALID_ACTIONS: CtaAction[] = ["reach_out", "nurture", "watchlist", "pass"];
@@ -31,11 +30,10 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
+  const sessionUser = await getSessionUser();
+  if (!sessionUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const cookieStore = await cookies();
-  const token = cookieStore.get(AUTH_COOKIE)?.value;
-  const sessionUser = token ? await verifyToken(token) : null;
+  const { id } = await params;
 
   let action: CtaAction, note: string | undefined, artistId: string;
   try {
@@ -93,11 +91,10 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
+  const sessionUser = await getSessionUser();
+  if (!sessionUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const cookieStore = await cookies();
-  const token = cookieStore.get(AUTH_COOKIE)?.value;
-  const sessionUser = token ? await verifyToken(token) : null;
+  const { id } = await params;
 
   let status: CtaStatus, note: string | undefined;
   try {

@@ -8,6 +8,9 @@ export async function PATCH(
 ) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!["admin", "team"].includes(user.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { id } = await params;
   let updates: Record<string, unknown>;
@@ -41,6 +44,9 @@ export async function DELETE(
 ) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (user.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { id } = await params;
   const supabase = getSupabaseServerClient();

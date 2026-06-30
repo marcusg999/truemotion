@@ -9,6 +9,9 @@ export interface ArtistListItem {
 }
 
 export async function GET() {
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const supabase = getSupabaseServerClient();
 
   const { data: artists, error: artistsError } = await supabase

@@ -1,4 +1,4 @@
-import { getAnthropicClient, ANTHROPIC_MODEL } from "@/lib/anthropic";
+import { getAnthropicClient, MODEL_EXTRACTION } from "@/lib/anthropic";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import type { MdcCategory, MdcEntry, MdcTaxonomyTerm } from "@/types";
 
@@ -110,14 +110,7 @@ function normalizeTags(
   return { normalized, uncanonicalized };
 }
 
-export async function runMdcExtraction(narrative: string): Promise<{
-  normalized: MdcEntry[];
-  uncanonicalized: string[];
-}> {
-  const [taxonomy] = await Promise.all([loadTaxonomy()]);
-
-  const prompt = `
-You are extracting MDC (Meta Data Criteria) tags from a hip-hop artist or label narrative.
+const MDC_STATIC_PREFIX = `You are extracting MDC (Meta Data Criteria) tags from a hip-hop artist or label narrative.
 MDC categories:
 - genre: musical genres and sub-genres (e.g. drill, trap, conscious rap, melodic rap)
 - region: geographic roots (e.g. Atlanta, Chicago, New York, Houston, UK)
@@ -126,29 +119,61 @@ MDC categories:
 - affiliation: label, collective, or notable cosigns (e.g. YSL, OVO, independent)
 - intelligence: platform-level traits (e.g. culturally grounded, forward looking, curated taste)
 
-Extract all relevant tags from the narrative below. Be thorough — a narrative usually contains 5-15 tags across categories. Use the submit_mdc tool.
+Extract all relevant tags from the narrative below. Be thorough — a narrative usually contains 5-15 tags across categories. Use the submit_mdc tool.`;
 
-Narrative:
-${narrative}
-`.trim();
+export interface MdcUsage {
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+}
+
+export async function runMdcExtraction(narrative: string): Promise<{
+  normalized: MdcEntry[];
+  uncanonicalized: string[];
+  usage: MdcUsage;
+}> {
+  const taxonomy = await loadTaxonomy();
 
   const anthropic = getAnthropicClient();
-  const response = await anthropic.messages.create({
-    model: ANTHROPIC_MODEL,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const response = await (anthropic.messages.create as (p: any) => Promise<any>)({
+    model: MODEL_EXTRACTION,
     max_tokens: 1024,
-    tools: [MDC_EXTRACTION_TOOL],
+    tools: [{ ...MDC_EXTRACTION_TOOL, cache_control: { type: "ephemeral" } }],
     tool_choice: { type: "tool", name: "submit_mdc" },
-    messages: [{ role: "user", content: prompt }],
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: MDC_STATIC_PREFIX, cache_control: { type: "ephemeral" } },
+          { type: "text", text: `\n\nNarrative:\n${narrative}` },
+        ],
+      },
+    ],
   });
 
-  const toolUse = response.content.find((b) => b.type === "tool_use");
-  if (!toolUse || toolUse.type !== "tool_use") {
+  const rawToolUse = (response.content as { type: string }[]).find((b) => b.type === "tool_use");
+  if (!rawToolUse) {
     throw new Error("Model did not return a submit_mdc tool call");
   }
 
-  const input = toolUse.input as {
-    extracted_tags: { category: string; term: string; weight: number }[];
+  const input = (rawToolUse as { type: string; input: { extracted_tags: { category: string; term: string; weight: number }[] } }).input;
+
+  const u = response.usage as {
+    input_tokens: number;
+    output_tokens: number;
+    cache_read_input_tokens?: number;
+    cache_creation_input_tokens?: number;
   };
 
-  return normalizeTags(input.extracted_tags ?? [], taxonomy);
+  return {
+    ...normalizeTags(input.extracted_tags ?? [], taxonomy),
+    usage: {
+      input_tokens: u.input_tokens,
+      output_tokens: u.output_tokens,
+      cache_read_tokens: u.cache_read_input_tokens ?? 0,
+      cache_write_tokens: u.cache_creation_input_tokens ?? 0,
+    },
+  };
 }

@@ -4,13 +4,23 @@ import { runScoringPipeline } from "@/lib/pipeline/scoring";
 import { runMdcExtraction } from "@/lib/pipeline/mdc";
 import { computeMatch } from "@/lib/pipeline/matching";
 import { getTrpMasterProfile, getReferenceProfile, getArchetypes } from "@/lib/data";
+import { MODEL_EXTRACTION, MODEL_SCORING } from "@/lib/anthropic";
 import type { Archetype, Artist, MatchChecklistItem, MdcEntry, ReferenceProfile, ScoringConfig } from "@/types";
 import type { MatchContext } from "@/lib/pipeline/scoring";
 
+export interface LlmCallUsage {
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+}
+
 export async function runEvaluationForArtist(
   artistId: string,
-  referenceProfileId?: string | null
-): Promise<void> {
+  referenceProfileId?: string | null,
+  onUsage?: (usage: LlmCallUsage) => Promise<void>
+): Promise<{ evaluationId: string }> {
   const supabase = getSupabaseServerClient();
 
   const { data: artist, error: artistError } = await supabase
@@ -56,8 +66,9 @@ export async function runEvaluationForArtist(
   if (referenceProfile) {
     if (artistMdc.length === 0 && (artist as Artist).narrative) {
       try {
-        const { normalized } = await runMdcExtraction((artist as Artist).narrative!);
+        const { normalized, usage } = await runMdcExtraction((artist as Artist).narrative!);
         artistMdc = normalized;
+        if (onUsage) await onUsage({ model: MODEL_EXTRACTION, ...usage });
       } catch {
         // silent — proceed without MDC
       }
@@ -78,6 +89,7 @@ export async function runEvaluationForArtist(
   }
 
   const result = await runScoringPipeline(artist as Artist, config, matchContext, archetypes);
+  if (onUsage) await onUsage({ model: MODEL_SCORING, ...result.usage });
 
   const record = {
     artist_id: artistId,
@@ -104,6 +116,12 @@ export async function runEvaluationForArtist(
     match_checklist: computedChecklist,
   };
 
-  const { error: insertError } = await supabase.from("evaluations").insert(record);
-  if (insertError) throw new Error(insertError.message);
+  const { data: inserted, error: insertError } = await supabase
+    .from("evaluations")
+    .insert(record)
+    .select("id")
+    .single();
+  if (insertError || !inserted) throw new Error(insertError?.message ?? "Failed to insert evaluation");
+
+  return { evaluationId: inserted.id };
 }

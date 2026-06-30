@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth";
-import { runEvaluationForArtist } from "@/lib/pipeline/evaluate";
-import type { Evaluation } from "@/types";
 
 export async function POST(
   request: NextRequest,
@@ -22,6 +20,7 @@ export async function POST(
   }
 
   const supabase = getSupabaseServerClient();
+
   const { data: artist, error: artistError } = await supabase
     .from("artists")
     .select("id")
@@ -32,24 +31,73 @@ export async function POST(
     return NextResponse.json({ error: "Artist not found" }, { status: 404 });
   }
 
-  try {
-    await runEvaluationForArtist(id, requestedProfileId);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Scoring pipeline failed";
-    return NextResponse.json({ error: message }, { status: 502 });
+  // Enforce per-user daily quota
+  const { data: config } = await supabase
+    .from("scoring_config")
+    .select("daily_eval_limit")
+    .eq("id", 1)
+    .single();
+  const dailyLimit: number = (config as { daily_eval_limit?: number } | null)?.daily_eval_limit ?? 10;
+
+  const oneDayAgo = new Date(Date.now() - 86_400_000).toISOString();
+  const { count: todayCount } = await supabase
+    .from("evaluation_jobs")
+    .select("*", { count: "exact", head: true })
+    .eq("requested_by", user.id)
+    .gte("created_at", oneDayAgo);
+
+  if ((todayCount ?? 0) >= dailyLimit) {
+    return NextResponse.json(
+      { error: `Daily evaluation limit of ${dailyLimit} reached` },
+      { status: 429 }
+    );
   }
 
-  const { data: evaluation, error: fetchError } = await supabase
-    .from("evaluations")
-    .select("*")
-    .eq("artist_id", id)
-    .order("created_at", { ascending: false })
-    .limit(1)
+  // Insert job
+  const { data: job, error: jobError } = await supabase
+    .from("evaluation_jobs")
+    .insert({
+      artist_id: id,
+      reference_profile_id: requestedProfileId,
+      kind: "full_eval",
+      requested_by: user.id,
+      status: "queued",
+    })
+    .select("id")
     .single();
 
-  if (fetchError) {
-    return NextResponse.json({ error: fetchError.message }, { status: 500 });
+  if (jobError || !job) {
+    return NextResponse.json({ error: "Failed to queue evaluation" }, { status: 500 });
   }
 
-  return NextResponse.json({ evaluation: evaluation as Evaluation }, { status: 201 });
+  // Fire background function (Netlify returns 202 immediately)
+  const bgUrl = process.env.URL
+    ? `${process.env.URL}/.netlify/functions/evaluate-background`
+    : null;
+
+  if (bgUrl) {
+    await fetch(bgUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jobId: job.id }),
+    }).catch((err) => console.error("[evaluate] failed to fire background fn:", err));
+  } else {
+    // Local dev: run synchronously (no Netlify URL)
+    const { runEvaluationForArtist } = await import("@/lib/pipeline/evaluate");
+    runEvaluationForArtist(id, requestedProfileId)
+      .then(async ({ evaluationId }) => {
+        await supabase
+          .from("evaluation_jobs")
+          .update({ status: "done", result_evaluation_id: evaluationId, updated_at: new Date().toISOString() })
+          .eq("id", job.id);
+      })
+      .catch(async (err) => {
+        await supabase
+          .from("evaluation_jobs")
+          .update({ status: "failed", error: String(err), updated_at: new Date().toISOString() })
+          .eq("id", job.id);
+      });
+  }
+
+  return NextResponse.json({ jobId: job.id }, { status: 202 });
 }
